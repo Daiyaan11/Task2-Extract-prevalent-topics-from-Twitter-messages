@@ -1,12 +1,11 @@
 import tweepy
 import os
+from dotenv import load_dotenv
 
-def authenticate():
-    API_KEY = os.getenv('API_KEY')
-    API_SECRET = os.getenv('API_SECRET')
-    ACCESS_TOKEN = os.getenv('ACCESS_TOKEN')
-    ACCESS_TOKEN_SECRET = os.getenv('ACCESS_TOKEN_SECRET')
+load_dotenv()
 
-    auth = tweepy.OAuthHandler(API_KEY, API_SECRET)
-    auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-    return tweepy.API(auth)
+def authenticate_v2():
+    BEARER_TOKEN = os.getenv("BEARER_TOKEN")
+    if not BEARER_TOKEN:
+        raise ValueError("BEARER_TOKEN is missing. Please check your .env file.")
+    return tweepy.Client(bearer_token=BEARER_TOKEN)

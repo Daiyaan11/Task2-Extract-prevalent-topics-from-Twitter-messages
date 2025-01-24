@@ -1,18 +1,57 @@
 import tweepy
-import csv
 import json
+import csv
+import os
+import time
 
-def collect_tweets_by_topic(api, topic, filename, limit=20):
-    tweets = tweepy.Cursor(api.search_tweets, q=topic, lang='en').items(limit)
-    data = [[tweet.id_str, tweet.created_at, tweet.retweet_count, tweet.text] for tweet in tweets]
+def collect_tweets_by_topic(client, topic, filename, limit=100):
+    query_params = {
+        "query": topic,
+        "tweet_fields": "id,text,author_id,created_at,public_metrics",
+        "max_results": 10
+    }
 
-    with open(f'data/raw/{filename}.csv', 'w', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-        writer.writerow(["Id", "Created_at", "Retweet_count", "Text"])
-        writer.writerows(data)
+    output_folder = "output"
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
 
-def save_user_timeline(api, screen_name, filename, pages=2):
-    with open(f'data/raw/{filename}.jsonl', 'w') as file:
-        for page in tweepy.Cursor(api.user_timeline, screen_name=screen_name, count=200).pages(pages):
-            for status in page:
-                file.write(json.dumps(status._json) + '\n')
+    json_path = os.path.join(output_folder, f"{filename}.json")
+    csv_path = os.path.join(output_folder, f"{filename}.csv")
+
+    tweets_data = []
+
+    try:
+        for _ in range(limit // query_params["max_results"]):  
+            response = client.search_recent_tweets(**query_params)
+            if "data" not in response:
+                print("No more tweets found.")
+                break
+
+            tweets_data.extend(response["data"])
+            print("Pausing for rate limit...")
+            time.sleep(20)
+        with open(json_path, "w", encoding="utf-8") as json_file:
+            json.dump(tweets_data, json_file, indent=4, ensure_ascii=False)
+        with open(csv_path, "w", newline="", encoding="utf-8") as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(["Tweet ID", "Author ID", "Created At", "Text", "Retweets", "Likes", "Replies", "Quotes"])
+            for tweet in tweets_data:
+                metrics = tweet["public_metrics"]
+                writer.writerow([
+                    tweet["id"],
+                    tweet["author_id"],
+                    tweet["created_at"],
+                    tweet["text"],
+                    metrics["retweet_count"],
+                    metrics["like_count"],
+                    metrics["reply_count"],
+                    metrics["quote_count"],
+                ])
+
+        print(f"Tweets saved to {json_path} and {csv_path}.")
+
+    except tweepy.errors.TooManyRequests:
+        print("Rate limit exceeded. Please try again later.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
