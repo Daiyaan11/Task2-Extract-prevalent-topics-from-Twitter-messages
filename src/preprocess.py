@@ -1,23 +1,37 @@
+import re
+import json
+from collections import Counter
 from nltk.tokenize import TweetTokenizer
 from nltk.corpus import stopwords
-from collections import Counter
 import string
-import json
 
-def preprocess(text, tokenizer, stopwords):
-    text = text.lower()
-    tokens = tokenizer.tokenize(text)
-    return [t for t in tokens if t not in stopwords and not t.isdigit()]
+# Pre-initialize for performance
+TOKENIZER = TweetTokenizer()
+STOPWORDS = set(stopwords.words('english') + list(string.punctuation) + ['rt', 'via', '...'])
+URL_PATTERN = re.compile(r"http\S+|@\w+")
+
+def clean_text(text):
+    """Remove URLs, mentions, and non-ASCII chars."""
+    text = URL_PATTERN.sub("", text)
+    return text.encode('ascii', 'ignore').decode('ascii').strip()
+
+def preprocess(text, tokenizer=TOKENIZER, stopwords=STOPWORDS):
+    """Normalize and tokenize text."""
+    text = clean_text(text.lower())
+    return [t for t in tokenizer.tokenize(text) if t not in stopwords and t.isalpha()]
 
 def analyze_tokens(filepath):
-    tokenizer = TweetTokenizer()
-    punctuation = list(string.punctuation)
-    stop_words = stopwords.words('english') + punctuation + ['rt', 'via', '...']
-
+    """Count tokens with robust error handling."""
     token_counts = Counter()
-    with open(filepath, 'r') as file:
-        for line in file:
-            tweet = json.loads(line)
-            tokens = preprocess(tweet['text'], tokenizer, stop_words)
-            token_counts.update(tokens)
+    try:
+        with open(filepath, 'r', encoding='utf-8') as file:
+            for line in file:
+                try:
+                    tweet = json.loads(line)
+                    tokens = preprocess(tweet.get('text', ''))
+                    token_counts.update(tokens)
+                except (json.JSONDecodeError, KeyError):
+                    continue
+    except IOError as e:
+        raise SystemExit(f"Error reading {filepath}: {e}")
     return token_counts.most_common(10)
